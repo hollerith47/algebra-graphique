@@ -1,103 +1,196 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+import * as React from 'react';
+import { FunctionParameters } from '@/components/FunctionParameters';
+import { PlotViewer } from '@/components/PlotViewer';
+import { DataTable } from '@/components/DataTable';
+import { History } from '@/components/History';
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+import {AngleMode, RU, Series} from '@/types/domain';
+import { buildPlotClient } from '@/services/use-cases/buildPlot.client';
+import { exportToPng } from '@/lib/plotly/export.adapter';
+import { historyService } from '@/services/history.service';
+
+export default function Page() {
+    const [formula, setFormula] = React.useState('sin(x) * x');
+    const [rangeMin, setRangeMin] = React.useState('-10');
+    const [rangeMax, setRangeMax] = React.useState('10');
+    const [step, setStep] = React.useState('0.1');
+    const [angleMode, setAngleMode] = React.useState<AngleMode>('rad');
+    const [plotData, setPlotData] = React.useState<Series>([]);
+    const [history, setHistory] = React.useState<string[]>([]);
+    const [isBuilding, setIsBuilding] = React.useState(false);
+    const [error, setError] = React.useState<string | null>(null);
+
+    // Charger l'historique au montage
+    React.useEffect(() => {
+        setHistory(historyService.getAll());
+    }, []);
+
+    const handleBuild = React.useCallback(async () => {
+        if (!formula.trim()) return;
+
+        setIsBuilding(true);
+        setError(null);
+
+        try {
+            const min = parseFloat(rangeMin);
+            const max = parseFloat(rangeMax);
+            const stepValue = parseFloat(step);
+
+            if (Number.isNaN(min) || Number.isNaN(max) || Number.isNaN(stepValue)) {
+                throw new Error(RU.NUMBERS_REQUIRED);
+            }
+            if (min >= max) throw new Error(RU.MIN_LESS_MAX);
+            if (stepValue <= 0) throw new Error(RU.STEP_POSITIVE);
+
+            const result = await buildPlotClient(formula, { min, max }, stepValue, angleMode);
+            if (!result || !result.meta) {
+                throw new Error(RU.CALCULATION_ERROR);
+            }
+
+            const {series, meta} = result
+            // 100% des points invalides → erreur claire
+            if (meta.invalid === meta.total) {
+                const msg =
+                    meta.cause === 'division_by_zero'
+                        ? RU.UNDEFINED_ON_ALL_INTERVALS
+                        : RU.UNDEFINED_ON_INTERVAL;
+                throw new Error(msg);
+            }
+
+            setPlotData(series);
+            historyService.add(formula);
+            setHistory(historyService.getAll());
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : RU.UNKNOWN);
+            console.error("HandleBuild ERROR", err)
+            setPlotData([]);
+        } finally {
+            setIsBuilding(false);
+        }
+    }, [formula, rangeMin, rangeMax, step, angleMode]);
+
+    const handleSave = React.useCallback(async () => {
+        if (plotData.length === 0) return;
+        try {
+            await exportToPng('plot-container', 'graph');
+        } catch {
+            setError('Не удалось экспортировать график');
+        }
+    }, [plotData]);
+
+    // Export CSV simple (sans service dédié)
+    const handleExportCsv = React.useCallback(() => {
+        if (plotData.length === 0) return;
+        try {
+            const rows = ['x,y', ...plotData.map(p => `${p.x},${p.y ?? ''}`)].join('\n');
+            const blob = new Blob([rows], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const safeName = `данные_${formula.replace(/[^a-zA-Z0-9\u0400-\u04FF]/g, '_')}.csv`;
+            a.href = url;
+            a.download = safeName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch {
+            setError('Не удалось экспортировать CSV');
+        }
+    }, [plotData, formula]);
+
+    const handleClear = React.useCallback(() => {
+        setFormula('');
+        setRangeMin('-10');
+        setRangeMax('10');
+        setStep('0.1');
+        setAngleMode('rad');
+        setPlotData([]);
+        setError(null);
+    }, []);
+
+    const handleSelectFormula = React.useCallback((selectedFormula: string) => {
+        setFormula(selectedFormula);
+        setError(null);
+    }, []);
+
+    const handleClearHistory = React.useCallback(() => {
+        historyService.clear();
+        setHistory([]);
+    }, []);
+
+    return (
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100">
+            <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                <header className="mb-8">
+                    <div className="flex items-center gap-4 mb-3">
+                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-blue-600 flex items-center justify-center shadow-lg">
+                            <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                      d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Построение графиков функций</h1>
+                            <p className="text-slate-600 mt-1">Визуализация математических функций y = f(x)</p>
+                        </div>
+                    </div>
+
+                    {error && (
+                        <div className="mt-4 p-4 rounded-lg bg-red-50 border border-red-200 flex items-start gap-3">
+                            <svg className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                      d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <div>
+                                <h3 className="text-sm font-semibold text-red-900">Ошибка</h3>
+                                <p className="text-sm text-red-700 mt-1">{error}</p>
+                            </div>
+                        </div>
+                    )}
+                </header>
+
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    <div className="lg:col-span-4 space-y-6">
+                        <FunctionParameters
+                            formula={formula}
+                            rangeMin={rangeMin}
+                            rangeMax={rangeMax}
+                            step={step}
+                            angleMode={angleMode}
+                            onFormulaChange={setFormula}
+                            onRangeMinChange={setRangeMin}
+                            onRangeMaxChange={setRangeMax}
+                            onStepChange={setStep}
+                            onAngleModeChange={setAngleMode}
+                            onBuild={handleBuild}
+                            onSave={handleSave}
+                            onClear={handleClear}
+                            isBuilding={isBuilding}
+                        />
+
+                        <History
+                            history={history}
+                            onSelectFormula={handleSelectFormula}
+                            onClearHistory={handleClearHistory}
+                        />
+                    </div>
+
+                    <div className="lg:col-span-8 space-y-6">
+                        {/* Important: id "plot-container" pour l’export PNG */}
+                        <PlotViewer id="plot-container" data={plotData} formula={formula} />
+                        <DataTable data={plotData} onExportCsv={handleExportCsv} />
+                    </div>
+                </div>
+
+                <footer className="mt-12 pt-8 border-t border-slate-200">
+                    <div className="flex items-center justify-between text-sm text-slate-500">
+                        <p>© 2025 Algebra Graphique. Построение графиков функций.</p>
+                        <p>Работает в современных браузерах</p>
+                    </div>
+                </footer>
+            </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
-  );
+    );
 }
