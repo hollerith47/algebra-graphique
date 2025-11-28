@@ -3,8 +3,9 @@
 import type { AngleMode } from '@/types/domain';
 
 let worker: Worker | null = null;
+let seq = 0;
 
-function ensureWorker() {
+export function ensureWorker() {
     if (!worker) {
         worker = new Worker(
             new URL('../lib/workers/eval.worker.ts', import.meta.url),
@@ -21,6 +22,8 @@ export function calcInWorker(
     angle: AngleMode
 ): Promise<{ xs: number[]; ys: (number | null)[]; meta: { invalid: number; total: number; cause?: string } }> {
     const w = ensureWorker();
+    const id = ++seq;
+
     return new Promise((resolve, reject) => {
         const handler = (ev: MessageEvent) => {
             const msg = ev.data;
@@ -33,6 +36,6 @@ export function calcInWorker(
             }
         };
         w.addEventListener('message', handler);
-        w.postMessage({ type: 'calculate', payload: { formula, range, step, angle } });
+        w.postMessage({ type: 'calculate', payload: { id,formula, range, step, angle } });
     });
 }

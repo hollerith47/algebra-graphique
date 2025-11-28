@@ -101,11 +101,14 @@ self.onmessage = (e: MessageEvent<CalcIn>) => {
 
     try {
         const { formula, range, step, angle } = payload;
+        const rid = (payload as any).id
+        if (!formula.trim()) {
+            throw new Error(RU.FORMULA_EMPTY);
+        }
         if (!(step > 0) || range.min >= range.max) throw new Error(RU.RANGE_STEP_INVALID);
 
         // ✅ Pré-normaliser puis valider
-        const raw = String(formula);
-        const expr = preprocess(raw, "js");
+        const expr = preprocess(formula, "js");
         validate(expr);
 
         const f = buildFn(expr);
@@ -138,11 +141,12 @@ self.onmessage = (e: MessageEvent<CalcIn>) => {
 
         (self as any).postMessage({
             type: 'success',
+            id: rid,
             data: { xs: rx, ys: ry, meta: { invalid, total: xs.length, cause } }
         } as Ok);
 
     } catch (err) {
-        (self as any).postMessage({ type: 'error', error: (err as Error).message } as Err);
+        (self as any).postMessage({ type: 'error',id: (payload as any)?.id ?? 0, error: (err as Error).message } as Err);
     }
 };
 

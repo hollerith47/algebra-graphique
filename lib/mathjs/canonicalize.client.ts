@@ -2,6 +2,7 @@
 
 import { create, all, MathNode, SymbolNode, OperatorNode, FunctionNode } from 'mathjs';
 import {convertPower, insertImplicitMultiplication, normalizeInput} from "@/lib/mathjs/normalize";
+import {RU} from "@/types/domain";
 
 const math = create(all, {});
 
@@ -32,6 +33,9 @@ function validateAst(node: MathNode) {
 }
 
 export function canonicalizeForWorker(rawFormula: string) {
+    if (!rawFormula.trim()) {
+        throw new Error(RU.FORMULA_EMPTY);
+    }
     // 0) normaliser + ANNULER toute éventuelle conversion '**' -> '^'
     const input0 = normalizeInput(rawFormula).replace(/\*\*/g, '^');
 

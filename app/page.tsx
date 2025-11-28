@@ -6,13 +6,13 @@ import { PlotViewer } from '@/components/PlotViewer';
 import { DataTable } from '@/components/DataTable';
 import { History } from '@/components/History';
 
-import {AngleMode, RU, Series} from '@/types/domain';
+import {AngleMode, RU, Series, ValidationError} from '@/types/domain';
 import { buildPlotClient } from '@/services/use-cases/buildPlot.client';
 import {clearHistory, exportPlotToPng, loadHistory} from "@/services/use-cases/history";
 import {addHistory} from "@/services/use-cases/history/addHistory";
-import {canonicalizeForWorker} from "@/lib/mathjs/canonicalize.client";
 import Footer from "@/components/Footer";
 import Header from "@/components/Header";
+import {canonicalizeSafe} from "@/lib/mathjs/canonicalize.safe";
 
 export default function Page() {
     const [formula, setFormula] = React.useState('sin(x) * x');
@@ -24,27 +24,24 @@ export default function Page() {
     const [history, setHistory] = React.useState<string[]>([]);
     const [isBuilding, setIsBuilding] = React.useState(false);
     const [error, setError] = React.useState<string | null>(null);
-    const [normalizedPreview, setNormalizedPreview] = React.useState<string>('');
-    const [jsFormula, setJsFormula] = React.useState("");
+
+    const deferredFormula = React.useDeferredValue(formula);
+
+    const canon = React.useMemo(() => canonicalizeSafe(deferredFormula), [deferredFormula]);
 
     // Charger l'historique au montage
     React.useEffect(() => {
-        setHistory(loadHistory);
+        setHistory(loadHistory());
     }, []);
-
-    // mettre à jour l’aperçu quand la formule change (sans casser l’input)
-    React.useEffect(() => {
-        try {
-            const { mathString, jsString } = canonicalizeForWorker(formula);
-            setNormalizedPreview(mathString);
-            setJsFormula(jsString);
-        } catch {
-            setNormalizedPreview(''); // si syntaxe invalide au fil de la saisie
-        }
-    }, [formula]);
 
     const handleBuild = React.useCallback(async () => {
         if (!formula.trim()) return;
+
+        if (!canon.ok) {
+            setError(canon.error);
+            setPlotData([]);
+            return;
+        }
 
         setIsBuilding(true);
         setError(null);
@@ -55,13 +52,14 @@ export default function Page() {
             const stepValue = parseFloat(step);
 
             if (Number.isNaN(min) || Number.isNaN(max) || Number.isNaN(stepValue)) {
-                throw new Error(RU.NUMBERS_REQUIRED);
+                throw new ValidationError(RU.NUMBERS_REQUIRED);
             }
             if (min >= max) throw new Error(RU.MIN_LESS_MAX);
             if (stepValue <= 0) throw new Error(RU.STEP_POSITIVE);
 
+
             // 2) buildPlotClient doit accepter la **formule pour worker** (jsString)
-            const result = await buildPlotClient(jsFormula, { min, max }, stepValue, angleMode);
+            const result = await buildPlotClient(canon.jsString, { min, max }, stepValue, angleMode);
             if (!result || !result.meta) {
                 throw new Error(RU.CALCULATION_ERROR);
             }
@@ -78,7 +76,7 @@ export default function Page() {
 
             setPlotData(series);
             addHistory(formula);
-            setHistory(loadHistory());
+            setHistory(loadHistory);
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : RU.UNKNOWN);
             setPlotData([]);
@@ -125,7 +123,6 @@ export default function Page() {
         setAngleMode('rad');
         setPlotData([]);
         setError(null);
-        setNormalizedPreview("")
     }, []);
 
     const handleSelectFormula = React.useCallback((selectedFormula: string) => {
@@ -171,7 +168,7 @@ export default function Page() {
                     </div>
 
                     <div className="lg:col-span-8 space-y-6">
-                        <PlotViewer id="plot-container" data={plotData} formula={normalizedPreview} />
+                        <PlotViewer id="plot-container" data={plotData} formula={canon.ok ? canon.mathString : formula} />
                         <DataTable data={plotData} onExportCsv={handleExportCsv} />
                     </div>
                 </div>
