@@ -34,6 +34,7 @@ function validate(expr: string) {
     for (const name of names) {
         // nombres (e.g., "e10") ne sont pas captés ici; on vérifie les vrais identifiants
         if (!ALLOWED_NAMES.has(name)) {
+            console.error("erreur de validation dans Validate depuis eval.worker")
             throw new Error(RU.SYMBOL_NOT_ALLOWED(name));
         }
     }
@@ -42,7 +43,7 @@ function validate(expr: string) {
 // Fabrique f(x) sans "with"
 function buildFn(formula: string): (x: number) => number {
     const argNames = ['x', ...Object.keys(FUNCS), ...Object.keys(CONSTANTS)]; // ordre des args
-    // eslint-disable-next-line no-new-func
+
     const fn = new Function(
         ...argNames,
         // Pas de "use strict" explicite : les modules workers sont déjà stricts.

@@ -17,7 +17,7 @@ type ReactPlotProps = {
     layout?: PlotLayout;
     config?: PlotConfig;
     plotly?: any;
-    divId?: string;              // <- l’ID sera porté par le VRAI graphDiv
+    divId?: string;
     className?: string;
     useResizeHandler?: boolean;
     onInitialized?: (_: any, graphDiv: HTMLElement) => void;
@@ -44,7 +44,6 @@ interface PlotViewerProps {
 export function PlotViewer({data, formula, id = 'plot-root', height = 400}: PlotViewerProps) {
     const [plotlyLib, setPlotlyLib] = React.useState<any>(null);
     const graphRef = React.useRef<HTMLElement | null>(null);
-
 
     // Charger Plotly côté client au montage
     React.useEffect(() => {

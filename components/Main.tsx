@@ -1,20 +1,19 @@
 'use client';
 
-import * as React from 'react';
-import { FunctionParameters } from '@/components/FunctionParameters';
-import { PlotViewer } from '@/components/PlotViewer';
-import { DataTable } from '@/components/DataTable';
-import { History } from '@/components/History';
-
-import {AngleMode, RU, Series} from '@/types/domain';
-import { buildPlotClient } from '@/services/use-cases/buildPlot.client';
+import * as React from "react";
+import {FunctionParameters} from "@/components/FunctionParameters";
+import {History} from '@/components/History';
+import Header from "@/components/Header";
 import {clearHistory, exportPlotToPng, loadHistory} from "@/services/use-cases/history";
+import {AngleMode, DomainError, ParseError, RU, Series, ValidationError} from "@/types/domain";
+import {buildPlotClient} from "@/services/use-cases/buildPlot.client";
 import {addHistory} from "@/services/use-cases/history/addHistory";
 import {canonicalizeForWorker} from "@/lib/mathjs/canonicalize.client";
+import {PlotViewer} from "@/components/PlotViewer";
+import {DataTable} from "@/components/DataTable";
 import Footer from "@/components/Footer";
-import Header from "@/components/Header";
 
-export default function Page() {
+export default function Main() {
     const [formula, setFormula] = React.useState('sin(x) * x');
     const [rangeMin, setRangeMin] = React.useState('-10');
     const [rangeMax, setRangeMax] = React.useState('10');
@@ -35,7 +34,7 @@ export default function Page() {
     // mettre à jour l’aperçu quand la formule change (sans casser l’input)
     React.useEffect(() => {
         try {
-            const { mathString, jsString } = canonicalizeForWorker(formula);
+            const {mathString, jsString} = canonicalizeForWorker(formula);
             setNormalizedPreview(mathString);
             setJsFormula(jsString);
         } catch {
@@ -102,7 +101,7 @@ export default function Page() {
         if (plotData.length === 0) return;
         try {
             const rows = ['x,y', ...plotData.map(p => `${p.x},${p.y ?? ''}`)].join('\n');
-            const blob = new Blob([rows], { type: 'text/csv;charset=utf-8;' });
+            const blob = new Blob([rows], {type: 'text/csv;charset=utf-8;'});
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             const safeName = `данные_${formula.replace(/[^a-zA-Z0-9\u0400-\u04FF]/g, '_')}.csv`;
@@ -138,12 +137,10 @@ export default function Page() {
         clearHistory();
         setHistory([]);
     }, []);
-
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100">
             <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                <Header error={error} />
-
+                <Header error={error}/>
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                     <div className="lg:col-span-4 space-y-6">
                         <FunctionParameters
@@ -171,12 +168,11 @@ export default function Page() {
                     </div>
 
                     <div className="lg:col-span-8 space-y-6">
-                        <PlotViewer id="plot-container" data={plotData} formula={normalizedPreview} />
-                        <DataTable data={plotData} onExportCsv={handleExportCsv} />
+                        <PlotViewer id="plot-container" data={plotData} formula={normalizedPreview}/>
+                        <DataTable data={plotData} onExportCsv={handleExportCsv}/>
                     </div>
                 </div>
-
-                <Footer />
+                <Footer/>
             </div>
         </div>
     );

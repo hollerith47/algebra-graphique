@@ -1,6 +1,8 @@
 import type {ISamplingService} from "@/types/ports";
 import type {Range, Step} from "@/types/domain";
 
+// TODO: fonction non utiliser pour le moment voir utilisation ou supprimer
+
 const REFINEMENT_THRESHOLD = 5; // Refine if |y2 - y1| is this many times the grid height
 const REFINEMENT_STEPS = 10; // Add this many points when refining
 

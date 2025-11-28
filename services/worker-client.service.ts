@@ -4,7 +4,7 @@ import type { AngleMode } from '@/types/domain';
 
 let worker: Worker | null = null;
 
-export function ensureWorker() {
+function ensureWorker() {
     if (!worker) {
         worker = new Worker(
             new URL('../lib/workers/eval.worker.ts', import.meta.url),
