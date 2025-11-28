@@ -8,8 +8,8 @@ import { History } from '@/components/History';
 
 import {AngleMode, RU, Series} from '@/types/domain';
 import { buildPlotClient } from '@/services/use-cases/buildPlot.client';
-import { exportToPng } from '@/lib/plotly/export.adapter';
-import { historyService } from '@/services/history.service';
+import {clearHistory, exportPlotToPng, loadHistory} from "@/services/use-cases/history";
+import {addHistory} from "@/services/use-cases/history/addHistory";
 
 export default function Page() {
     const [formula, setFormula] = React.useState('sin(x) * x');
@@ -21,10 +21,11 @@ export default function Page() {
     const [history, setHistory] = React.useState<string[]>([]);
     const [isBuilding, setIsBuilding] = React.useState(false);
     const [error, setError] = React.useState<string | null>(null);
+    const formulaName = formula.replace("", "_")
 
     // Charger l'historique au montage
     React.useEffect(() => {
-        setHistory(historyService.getAll());
+        setHistory(loadHistory);
     }, []);
 
     const handleBuild = React.useCallback(async () => {
@@ -60,8 +61,8 @@ export default function Page() {
             }
 
             setPlotData(series);
-            historyService.add(formula);
-            setHistory(historyService.getAll());
+            addHistory(formula);
+            setHistory(loadHistory);
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : RU.UNKNOWN);
             console.error("HandleBuild ERROR", err)
@@ -74,7 +75,7 @@ export default function Page() {
     const handleSave = React.useCallback(async () => {
         if (plotData.length === 0) return;
         try {
-            await exportToPng('plot-container', 'graph');
+            await exportPlotToPng('plot-container', `graph${formulaName}`);
         } catch {
             setError('Не удалось экспортировать график');
         }
@@ -116,7 +117,7 @@ export default function Page() {
     }, []);
 
     const handleClearHistory = React.useCallback(() => {
-        historyService.clear();
+        clearHistory();
         setHistory([]);
     }, []);
 

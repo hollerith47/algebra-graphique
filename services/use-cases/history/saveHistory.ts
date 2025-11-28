@@ -5,6 +5,3 @@ export function saveToHistory(formula: string): void {
     historyService.add(formula);
 }
 
-export function clearHistory(): void {
-    historyService.clear();
-}
